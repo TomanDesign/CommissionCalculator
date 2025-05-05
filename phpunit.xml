@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit bootstrap="vendor/autoload.php"
+         executionOrder="random"
+         cacheResult="false"
          colors="true">
+
     <testsuites>
-        <testsuite name="Project Test Suite">
-            <directory>./tests</directory>
+        <testsuite name="Commission Calculator">
+            <directory>tests</directory>
         </testsuite>
     </testsuites>
 </phpunit>
