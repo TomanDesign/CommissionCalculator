@@ -2,6 +2,9 @@
 
 namespace App;
 
+use App\Service\BinLookupInterface;
+use App\Service\ExchangeRateProviderInterface;
+
 class CommissionCalculator
 {
     private const EU_COUNTRIES = [
@@ -10,10 +13,22 @@ class CommissionCalculator
         'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK'
     ];
 
+    private BinLookupInterface $binLookup;
+    private ExchangeRateProviderInterface $exchangeRateProvider;
+
+    public function __construct(
+        BinLookupInterface $binLookup,
+        ExchangeRateProviderInterface $exchangeRateProvider
+    ) {
+        $this->binLookup = $binLookup;
+        $this->exchangeRateProvider = $exchangeRateProvider;
+    }
+
     public function run(string $filename): void
     {
         if (!file_exists($filename)) {
-            die("File not found: $filename\n");
+            echo "File not found: $filename\n";
+            return;
         }
 
         $lines = file($filename, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
@@ -26,19 +41,19 @@ class CommissionCalculator
             }
 
             $bin = $data['bin'];
-            $amount = (float)$data['amount'];
+            $amount = (float) $data['amount'];
             $currency = strtoupper($data['currency']);
 
-            $binData = $this->fetchBinData($bin);
-            if (!$binData || !isset($binData['country']['alpha2'])) {
+            $countryCode = $this->binLookup->getCountryCode($bin);
+            if (!$countryCode) {
                 echo "BIN lookup failed for $bin\n";
                 continue;
             }
 
-            $isEu = $this->isEu($binData['country']['alpha2']);
-            $rate = $this->getExchangeRate($currency);
+            $isEu = $this->isEu($countryCode);
+            $rate = $this->exchangeRateProvider->getRate($currency);
             if ($rate === 0.0) {
-                echo "Exchange rate not available for $currency\n";
+                echo "Exchange rate unavailable for $currency\n";
                 continue;
             }
 
@@ -47,56 +62,6 @@ class CommissionCalculator
 
             echo number_format($commission, 10, '.', '') . PHP_EOL;
         }
-    }
-
-    private function fetchBinData(string $bin): ?array
-    {
-        $url = 'https://lookup.binlist.net/' . urlencode($bin);
-        $response = $this->curlGet($url);
-        return $response ? json_decode($response, true) : null;
-    }
-
-    private function getExchangeRate(string $currency): float
-    {
-        if ($currency === 'EUR') {
-            return 1.0;
-        }
-
-        $url = 'https://api.exchangerate.host/latest';
-        $response = $this->curlGet($url);
-        $data = $response ? json_decode($response, true) : null;
-
-        return $data['rates'][$currency] ?? 0.0;
-    }
-
-    private function curlGet(string $url): ?string
-    {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_USERAGENT => 'PHP Commission Calculator',
-            CURLOPT_TIMEOUT => 10
-        ]);
-
-        $response = curl_exec($ch);
-
-        if (curl_errno($ch)) {
-            echo "cURL error: " . curl_error($ch) . PHP_EOL;
-            curl_close($ch);
-            return null;
-        }
-
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($httpCode !== 200) {
-            echo "HTTP $httpCode returned for URL: $url\n";
-            return null;
-        }
-
-        return $response;
     }
 
     private function convertToEur(float $amount, string $currency, float $rate): float
