@@ -16,5 +16,8 @@
       "phpunit/phpunit": "^11.5"
     },
     "minimum-stability": "stable",
-    "license": "MIT"
-  }
+    "license": "MIT",
+    "require": {
+        "vlucas/phpdotenv": "^5.6"
+    }
+}
