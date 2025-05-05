@@ -1,49 +1,89 @@
 <?php
 
+declare(strict_types=1);
+
 use PHPUnit\Framework\TestCase;
 use App\CommissionCalculator;
-
-require_once __DIR__ . '/../src/CommissionCalculator.php';
+use App\Service\BinLookupInterface;
+use App\Service\ExchangeRateProviderInterface;
 
 class CommissionCalculatorTest extends TestCase
 {
-    private CommissionCalculator $calculator;
+    private string $tempFile;
 
-    protected function setUp(): void
+    protected function tearDown(): void
     {
-        $this->calculator = new CommissionCalculator();
+        if (file_exists($this->tempFile)) {
+            unlink($this->tempFile);
+        }
     }
 
-    public function testIsEu(): void
+    private function createTempInput(string $jsonLine): string
     {
-        $this->assertTrue($this->calculator->isEu('DE'));
-        $this->assertFalse($this->calculator->isEu('US'));
+        $this->tempFile = tempnam(sys_get_temp_dir(), 'commission_input_');
+        file_put_contents($this->tempFile, $jsonLine);
+        return $this->tempFile;
     }
 
-    public function testConvertToEur(): void
+    public function testCommissionForEuTransaction(): void
     {
-        $this->assertEquals(100.0, $this->calculator->convertToEur(100, 'EUR', 0));
-        $this->assertEquals(50.0, $this->calculator->convertToEur(100, 'USD', 2.0));
+        // Arrange
+        $binMock = $this->createMock(BinLookupInterface::class);
+        $binMock->method('getCountryCode')->willReturn('DE'); // EU country
+
+        $rateMock = $this->createMock(ExchangeRateProviderInterface::class);
+        $rateMock->method('getRate')->willReturn(1.0); // EUR rate
+
+        $calculator = new CommissionCalculator($binMock, $rateMock);
+
+        $file = $this->createTempInput('{"bin":"45717360","amount":"100.00","currency":"EUR"}');
+
+        // Act
+        ob_start();
+        $calculator->run($file);
+        $output = trim(ob_get_clean());
+
+        // Assert
+        $this->assertEquals("1.0000000000", $output);
     }
 
-    public function testCalculateCommission(): void
+    public function testCommissionForNonEuTransaction(): void
     {
-        $this->assertEquals(1.0, $this->calculator->calculateCommission(100, true));
-        $this->assertEquals(2.0, $this->calculator->calculateCommission(100, false));
+        // Arrange
+        $binMock = $this->createMock(BinLookupInterface::class);
+        $binMock->method('getCountryCode')->willReturn('US'); // Non-EU
+
+        $rateMock = $this->createMock(ExchangeRateProviderInterface::class);
+        $rateMock->method('getRate')->willReturn(2.0); // Let's say $1 = 0.5 EUR
+
+        $calculator = new CommissionCalculator($binMock, $rateMock);
+
+        $file = $this->createTempInput('{"bin":"516793","amount":"100.00","currency":"USD"}');
+
+        // Act
+        ob_start();
+        $calculator->run($file);
+        $output = trim(ob_get_clean());
+
+        // 100 USD / 2.0 = 50 EUR → 50 * 0.02 = 1.0000000000
+        $this->assertEquals("1.0000000000", $output);
     }
 
-    public function testParseLine(): void
+    public function testSkipsInvalidJson(): void
     {
-        $line = '"bin":"45717360","amount":"100.00","currency":"EUR"';
-        $parsed = $this->calculator->parseLine($line);
-        $this->assertEquals('45717360', $parsed['bin']);
-        $this->assertEquals(100.0, $parsed['amount']);
-        $this->assertEquals('EUR', $parsed['currency']);
-    }
+        // Arrange
+        $binMock = $this->createMock(BinLookupInterface::class);
+        $rateMock = $this->createMock(ExchangeRateProviderInterface::class);
+        $calculator = new CommissionCalculator($binMock, $rateMock);
 
-    public function testParseLineInvalid(): void
-    {
-        $line = 'INVALID_JSON';
-        $this->assertNull($this->calculator->parseLine($line));
+        $file = $this->createTempInput('INVALID LINE');
+
+        // Act
+        ob_start();
+        $calculator->run($file);
+        $output = trim(ob_get_clean());
+
+        // Assert
+        $this->assertMatchesRegularExpression('/Invalid line:/', $output);
     }
 }
