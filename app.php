@@ -15,5 +15,5 @@ $filename = $argv[1] ?? null;
 if ($filename) {
     $calculator->run($filename);
 } else {
-    echo "Usage: php app.php input.txt\n";
+    echo "Usage by command line: php app.php input.txt\n";
 }
