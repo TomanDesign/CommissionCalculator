@@ -1,0 +1,9 @@
+/vendor/
+*.log
+*.lock
+.DS_Store
+*.bak
+.idea/
+.vscode/
+.phpunit.result.cache
+coverage/
