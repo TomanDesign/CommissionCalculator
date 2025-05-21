@@ -18,7 +18,7 @@ A PHP CLI tool that calculates transaction commissions based on BIN (Bank Identi
 Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/YourUsername/CommissionCalculator.git
+git clone https://github.com/TomanDesign/CommissionCalculator.git
 cd CommissionCalculator
 composer install
 ```
@@ -92,7 +92,7 @@ tests/CommissionCalculatorTest.php
 
 ## 📄 License
 
-MIT © [Your Name or Organization]
+MIT © [AIHouse]
 
 ---
 
